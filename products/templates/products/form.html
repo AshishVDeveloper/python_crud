@@ -1,0 +1,178 @@
+{% extends "products/base.html" %}
+
+{% block title %}{% if mode == 'edit' %}Edit Product{% else %}Add Product{% endif %} | Product CRUD{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 id="pageTitle">{% if mode == 'edit' %}Edit Product{% else %}Add Product{% endif %}</h1>
+        <div class="muted">The form saves data through the product REST API.</div>
+    </div>
+    <a class="btn btn-secondary" href="{% url 'product-list-page' %}">Back to List</a>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form id="productForm" novalidate>
+            {% csrf_token %}
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="name">Product Name *</label>
+                    <input id="name" name="name" type="text" maxlength="200" required>
+                    <div class="field-error" id="nameError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="price">Price *</label>
+                    <input id="price" name="price" type="number" min="0" step="0.01" required>
+                    <div class="field-error" id="priceError"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="quantity">Quantity *</label>
+                    <input id="quantity" name="quantity" type="number" min="0" step="1" required>
+                    <div class="field-error" id="quantityError"></div>
+                </div>
+
+                <div class="form-group full">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" rows="5"></textarea>
+                    <div class="field-error" id="descriptionError"></div>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button class="btn btn-primary" id="saveButton" type="submit">
+                    {% if mode == 'edit' %}Update Product{% else %}Add Product{% endif %}
+                </button>
+                <a class="btn btn-secondary" href="{% url 'product-list-page' %}">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const MODE = "{{ mode }}";
+    const PRODUCT_ID = {% if product_id %}{{ product_id }}{% else %}null{% endif %};
+    const LIST_API_URL = "{% url 'product-list-create-api' %}";
+    const LIST_PAGE_URL = "{% url 'product-list-page' %}";
+
+    const ACCESS_TOKEN = localStorage.getItem("access_token");
+
+    if (!ACCESS_TOKEN) {
+        window.location.href = "/login/";
+    }
+
+    function detailApiUrl() {
+        return `${LIST_API_URL}${PRODUCT_ID}/`;
+    }
+
+    function getCsrfToken() {
+        return document.querySelector('[name="csrfmiddlewaretoken"]').value;
+    }
+
+    function clearErrors() {
+        ["name", "price", "quantity", "description"].forEach(field => {
+            document.getElementById(`${field}Error`).textContent = "";
+        });
+    }
+
+    function displayApiErrors(errors) {
+        clearErrors();
+        let fallback = [];
+        Object.entries(errors || {}).forEach(([field, messages]) => {
+            const text = Array.isArray(messages) ? messages.join(" ") : String(messages);
+            const target = document.getElementById(`${field}Error`);
+            if (target) target.textContent = text;
+            else fallback.push(text);
+        });
+        if (fallback.length) window.alert(fallback.join("\n"));
+    }
+
+    async function loadProduct() {
+        if (MODE !== "edit" || !PRODUCT_ID) return;
+
+        try {
+            const response = await fetch(detailApiUrl(), {
+                headers: {
+                    "Authorization": `Bearer ${ACCESS_TOKEN}`
+                }
+            });
+            if (!response.ok) {
+                if (response.status === 404) throw new Error("Product not found.");
+                throw new Error("Unable to load product.");
+            }
+
+            const product = await response.json();
+            document.getElementById("name").value = product.name ?? "";
+            document.getElementById("description").value = product.description ?? "";
+            document.getElementById("price").value = product.price ?? "";
+            document.getElementById("quantity").value = product.quantity ?? "";
+        } catch (error) {
+            window.alert(error.message);
+            window.location.href = LIST_PAGE_URL;
+        }
+    }
+
+    document.getElementById("productForm").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        clearErrors();
+
+        if (!event.target.checkValidity()) {
+            event.target.reportValidity();
+            return;
+        }
+
+        const payload = {
+            name: document.getElementById("name").value.trim(),
+            description: document.getElementById("description").value.trim(),
+            price: document.getElementById("price").value,
+            quantity: Number(document.getElementById("quantity").value)
+        };
+
+        const saveButton = document.getElementById("saveButton");
+        saveButton.disabled = true;
+
+        try {
+            const response = await fetch(MODE === "edit" ? detailApiUrl() : LIST_API_URL, {
+                method: MODE === "edit" ? "PUT" : "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${ACCESS_TOKEN}`,
+                    "X-CSRFToken": getCsrfToken()
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.status === 401) {
+                window.alert("Session expired. Please login again.");
+
+                localStorage.removeItem("access_token");
+                localStorage.removeItem("refresh_token");
+
+                window.location.href = "/login/";
+                return;
+            }
+
+            if (!response.ok) {
+                const errors = await response.json().catch(() => ({}));
+                displayApiErrors(errors);
+                throw new Error("Please correct the highlighted fields.");
+            }
+
+            window.alert(MODE === "edit" ? "Product updated successfully." : "Product added successfully.");
+            window.location.href = LIST_PAGE_URL;
+        } catch (error) {
+            if (error.message !== "Please correct the highlighted fields.") {
+                window.alert(error.message);
+            }
+        } finally {
+            saveButton.disabled = false;
+        }
+    });
+
+    loadProduct();
+</script>
+{% endblock %}

@@ -1,0 +1,105 @@
+{% extends "products/base.html" %}
+
+{% block title %}Login | Product CRUD{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:450px; margin:60px auto;">
+    <h1 style="margin-bottom:20px;">Login</h1>
+
+    <form id="loginForm">
+
+        <div style="margin-bottom:15px;">
+            <label>Username</label>
+
+            <input
+                type="text"
+                id="username"
+                required
+                style="width:100%; padding:10px;"
+            >
+        </div>
+
+        <div style="margin-bottom:15px;">
+            <label>Password</label>
+
+            <input
+                type="password"
+                id="password"
+                required
+                style="width:100%; padding:10px;"
+            >
+        </div>
+
+        <button
+            type="submit"
+            class="btn btn-primary"
+            style="width:100%;"
+        >
+            Login
+        </button>
+
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document
+    .getElementById("loginForm")
+    .addEventListener("submit", async function(e) {
+
+        e.preventDefault();
+
+        const username =
+            document.getElementById("username").value;
+
+        const password =
+            document.getElementById("password").value;
+
+        try {
+
+            const response = await fetch("/api/token/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    username: username,
+                    password: password
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                window.alert(
+                    data.detail || "Invalid username or password."
+                );
+
+                return;
+            }
+
+            localStorage.setItem(
+                "access_token",
+                data.access
+            );
+
+            localStorage.setItem(
+                "refresh_token",
+                data.refresh
+            );
+
+            window.location.href = "/products/";
+
+        } catch (error) {
+
+            console.error(error);
+
+            window.alert(
+                "Unable to login. Please try again."
+            );
+        }
+
+    });
+</script>
+{% endblock %}
